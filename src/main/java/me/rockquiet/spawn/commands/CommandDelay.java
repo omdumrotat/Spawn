@@ -1,5 +1,6 @@
 package me.rockquiet.spawn.commands;
 
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import me.rockquiet.spawn.Spawn;
 import me.rockquiet.spawn.SpawnHandler;
 import me.rockquiet.spawn.configuration.FileManager;
@@ -13,16 +14,16 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class CommandDelay implements Listener {
 
-    private final Map<UUID, BukkitTask> delay = new HashMap<>();
+    private final Map<UUID, WrappedTask> delayTasks = new HashMap<>();
 
     private final Spawn plugin;
     private final FileManager fileManager;
@@ -58,7 +59,7 @@ public class CommandDelay implements Listener {
         }
 
         UUID playerUUID = player.getUniqueId();
-        if (delay.containsKey(playerUUID)) {
+        if (delayTasks.containsKey(playerUUID)) {
             return;
         }
 
@@ -69,21 +70,27 @@ public class CommandDelay implements Listener {
             player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, (delayTime + 1) * 20, 0, false, false));
         }
 
-        delay.put(playerUUID, new BukkitRunnable() {
-            int delayRemaining = delayTime;
-
+        AtomicInteger delayRemaining = new AtomicInteger(delayTime);
+        
+        // Use FoliaLib timer for cross-platform compatibility
+        plugin.getFoliaLib().getScheduler().runTimer(new Consumer<WrappedTask>() {
             @Override
-            public void run() {
-                if (delayRemaining <= delayTime && delayRemaining >= 1) { // runs until timer reaches 1
-                    messageManager.sendMessage(player, "delay-left", "%delay%", String.valueOf(delayRemaining));
-                } else if (delayRemaining == 0) { // runs once
-                    spawnHandler.teleportPlayer(player);
-                    delay.remove(playerUUID);
-                    cancel();
+            public void accept(WrappedTask timerTask) {
+                // Store the task so it can be cancelled later
+                if (!delayTasks.containsKey(playerUUID)) {
+                    delayTasks.put(playerUUID, timerTask);
                 }
-                delayRemaining--;
+                
+                int remaining = delayRemaining.getAndDecrement();
+                if (remaining > 0 && remaining <= delayTime) { // runs until timer reaches 1
+                    messageManager.sendMessage(player, "delay-left", "%delay%", String.valueOf(remaining));
+                } else if (remaining == 0) { // runs once
+                    spawnHandler.teleportPlayer(player);
+                    delayTasks.remove(playerUUID);
+                    timerTask.cancel();
+                }
             }
-        }.runTaskTimer(plugin, 0, 20));
+        }, 0, 20);
     }
 
     private void clearBlindness(Player player) {
@@ -107,13 +114,15 @@ public class CommandDelay implements Listener {
 
         UUID playerUUID = player.getUniqueId();
 
-        if (!delay.containsKey(playerUUID)) {
+        if (!delayTasks.containsKey(playerUUID)) {
             return;
         }
 
         if (fileManager.getYamlConfig().getBoolean("teleport-delay.cancel-on-move")) {
-            delay.get(playerUUID).cancel();
-            delay.remove(playerUUID);
+            WrappedTask task = delayTasks.remove(playerUUID);
+            if (task != null) {
+                task.cancel();
+            }
 
             clearBlindness(player);
 
@@ -126,10 +135,9 @@ public class CommandDelay implements Listener {
         Player player = event.getPlayer();
         UUID playerUUID = player.getUniqueId();
 
-        if (delay.containsKey(playerUUID)) {
-            delay.get(playerUUID).cancel();
-            delay.remove(playerUUID);
-
+        WrappedTask task = delayTasks.remove(playerUUID);
+        if (task != null) {
+            task.cancel();
             clearBlindness(player);
         }
     }
