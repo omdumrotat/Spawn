@@ -10,6 +10,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 
 public class SpawnHandler {
 
@@ -130,18 +131,26 @@ public class SpawnHandler {
             player.setFallDistance(0F);
         }
 
+        Location targetLocation;
         if (config.getBoolean("use-player-head-rotation.enabled")) {
-            Location location = spawnLocation.clone();
-            location.setDirection(player.getLocation().getDirection());
-            player.teleport(location, PlayerTeleportEvent.TeleportCause.PLUGIN);
+            targetLocation = spawnLocation.clone();
+            targetLocation.setDirection(player.getLocation().getDirection());
         } else {
-            player.teleport(spawnLocation, PlayerTeleportEvent.TeleportCause.PLUGIN);
+            targetLocation = spawnLocation;
         }
 
-        spawnParticles(player);
-        playSound(player);
-
-        messageManager.sendMessage(player, "teleport");
+        // Use FoliaLib for async teleportation (Folia-compatible)
+        plugin.getFoliaLib().getScheduler().teleportAsync(player, targetLocation, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        
+        // Execute effects after teleportation on the next tick at the target location
+        plugin.getFoliaLib().getScheduler().runAtLocation(targetLocation, new Consumer<com.tcoded.folialib.wrapper.task.WrappedTask>() {
+            @Override
+            public void accept(com.tcoded.folialib.wrapper.task.WrappedTask task) {
+                spawnParticles(player);
+                playSound(player);
+                messageManager.sendMessage(player, "teleport");
+            }
+        });
     }
 
     public void spawnParticles(Player player) {

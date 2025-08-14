@@ -2,6 +2,7 @@ package me.rockquiet.spawn.updater;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import me.rockquiet.spawn.Spawn;
 
 import java.io.BufferedReader;
@@ -9,12 +10,15 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.function.Consumer;
 
 public class UpdateChecker {
 
     public UpdateChecker(Spawn plugin) {
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            try {
+        plugin.getFoliaLib().getScheduler().runAsync(new Consumer<WrappedTask>() {
+            @Override
+            public void accept(WrappedTask task) {
+                try {
                 URL url = new URL("https://api.github.com/repos/rockquiet/spawn/releases/latest");
                 HttpURLConnection con = (HttpURLConnection) url.openConnection();
                 con.setRequestMethod("GET");
@@ -48,8 +52,9 @@ public class UpdateChecker {
                 } else if (compare < 0) {
                     plugin.getLogger().warning("You are running a newer version of the plugin than released. If you are using a development build, please report any bugs on the project's GitHub.");
                 }
-            } catch (IOException e) {
-                plugin.getLogger().info("Unable to check for updates: " + e.getMessage());
+                } catch (IOException e) {
+                    plugin.getLogger().info("Unable to check for updates: " + e.getMessage());
+                }
             }
         });
     }

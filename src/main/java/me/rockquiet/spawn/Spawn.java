@@ -1,5 +1,6 @@
 package me.rockquiet.spawn;
 
+import com.tcoded.folialib.FoliaLib;
 import me.rockquiet.spawn.commands.SpawnCommand;
 import me.rockquiet.spawn.commands.TabComplete;
 import me.rockquiet.spawn.configuration.FileManager;
@@ -23,13 +24,21 @@ import java.util.Arrays;
 public final class Spawn extends JavaPlugin {
 
     private static final Version SERVER_VERSION = Version.parse(Bukkit.getBukkitVersion());
+    private FoliaLib foliaLib;
 
     public static Version getServerVersion() {
         return SERVER_VERSION;
     }
 
+    public FoliaLib getFoliaLib() {
+        return foliaLib;
+    }
+
     @Override
     public void onEnable() {
+        // Initialize FoliaLib for cross-platform scheduler support
+        foliaLib = new FoliaLib(this);
+
         // create all files and update them if outdated
         FileManager fileManager = new FileManager(this);
 
@@ -62,6 +71,14 @@ public final class Spawn extends JavaPlugin {
         // check for new plugin versions
         if (updateChecks) {
             new UpdateChecker(this);
+        }
+    }
+
+    @Override
+    public void onDisable() {
+        // Cancel all FoliaLib tasks when plugin is disabled
+        if (foliaLib != null) {
+            foliaLib.getScheduler().cancelAllTasks();
         }
     }
 }
